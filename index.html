@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="wn" />
+  <meta name="theme-color" content="#0f1115" />
+  <title>wn</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="app.css" />
+  <script>
+    try {
+      if (!localStorage.getItem('wn_url') || !localStorage.getItem('wn_key')) {
+        document.documentElement.classList.add('need-setup');
+      }
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="wrap" id="setup">
+    <div class="top">
+      <h1>wn</h1>
+      <button type="button" class="btn btn-ghost btn-sm" id="btnBack">返回</button>
+    </div>
+    <div class="card">
+      <div class="field">
+        <label for="apiUrl">網址</label>
+        <input id="apiUrl" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label for="apiKey">金鑰</label>
+        <input id="apiKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      </div>
+      <button type="button" class="btn btn-primary" id="btnSetup" style="width:100%">儲存</button>
+    </div>
+  </div>
+
+  <div class="wrap" id="app">
+    <div class="top">
+      <h1>訓練紀錄</h1>
+      <div class="top-side">
+        <span id="net" class="net"></span>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnCfg">設定</button>
+      </div>
+    </div>
+
+    <div class="bar">
+      <div class="field">
+        <label for="date">日期</label>
+        <input id="date" type="date" />
+      </div>
+      <div class="field">
+        <label for="dayType">日類型</label>
+        <select id="dayType"></select>
+      </div>
+      <div class="field" style="flex-basis:100%">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-primary" id="btnGenerate" style="width:100%">依歷史生成下次課表</button>
+      </div>
+    </div>
+
+    <div id="meta" class="muted" style="margin-bottom:10px"></div>
+    <div id="sessionNotes"></div>
+    <div id="exercises"></div>
+    <div id="empty" class="empty">先選日類型，再按「依歷史生成下次課表」。</div>
+
+    <div class="row" style="margin-top:8px">
+      <button type="button" class="btn btn-ghost grow" id="btnAddEx">＋ 新增動作</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-inner">
+      <button type="button" class="btn btn-ghost" id="btnDraft">存草稿</button>
+      <button type="button" class="btn btn-ok" id="btnSave">完成並寫入試算表</button>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

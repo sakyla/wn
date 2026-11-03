@@ -948,6 +948,9 @@ function wl_writeNewBlock_(sheet, plan, built, dateStr) {
     var src = sheet.getRange(1, plan.formatFromCol, Math.max(sheet.getLastRow(), built.rowCount + 5), WorkoutLogic.BLOCK_WIDTH);
     var dst = sheet.getRange(1, colStart, Math.max(sheet.getLastRow(), built.rowCount + 5), WorkoutLogic.BLOCK_WIDTH);
     src.copyTo(dst, { formatOnly: true });
+    for (var k = 0; k < WorkoutLogic.BLOCK_WIDTH; k++) {
+      sheet.setColumnWidth(colStart + k, sheet.getColumnWidth(plan.formatFromCol + k));
+    }
   }
 
   

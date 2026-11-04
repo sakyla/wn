@@ -21,6 +21,7 @@ var flushing = false;
 var retryTimer = null;
 var bootTimer = null;
 var booted = false;
+var itemWaiters = {};
 
 function $(id) { return document.getElementById(id); }
 
@@ -47,8 +48,10 @@ function fromInputDate(s) {
 
 function setLoading(on) {
   $('app').classList.toggle('loading', !!on);
-  $('btnGenerate').disabled = !!on;
-  $('btnSave').disabled = !!on;
+  var g = $('btnGenerate');
+  var s = $('btnSave');
+  if (on || g.dataset.busy !== '1') g.disabled = !!on;
+  if (on || s.dataset.busy !== '1') s.disabled = !!on;
 }
 
 function configured() {
@@ -99,6 +102,28 @@ function readQueue() {
 
 function writeQueue(q) {
   try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch (e) {}
+}
+
+function watchItem(id) {
+  return new Promise(function (resolve) {
+    if (!itemWaiters[id]) itemWaiters[id] = [];
+    itemWaiters[id].push(resolve);
+  });
+}
+
+function settleItem(id, result) {
+  var list = itemWaiters[id];
+  if (!list) return;
+  delete itemWaiters[id];
+  for (var i = 0; i < list.length; i++) list[i](result);
+}
+
+function moveWaiters(fromId, toId) {
+  var list = itemWaiters[fromId];
+  if (!list || fromId === toId) return;
+  delete itemWaiters[fromId];
+  if (!itemWaiters[toId]) itemWaiters[toId] = [];
+  itemWaiters[toId] = itemWaiters[toId].concat(list);
 }
 
 function scheduleRetry(item) {
@@ -170,6 +195,7 @@ function kickQueue() {
         showToast((res && res.error) || '未授權', true);
       }
       setNet('未授權');
+      settleItem(item.id, { ok: false, error: (res && res.error) || '未授權' });
       return;
     }
     if (item.type === 'session' && res.needConfirm) {
@@ -181,8 +207,10 @@ function kickQueue() {
         var qq = readQueue();
         qq.unshift(again);
         writeQueue(qq);
-      } else if (!readQueue().length) {
-        setNet('已同步');
+        moveWaiters(item.id, again.id);
+      } else {
+        settleItem(item.id, { cancel: true });
+        if (!readQueue().length) setNet('已同步');
       }
       kickQueue();
       return;
@@ -195,11 +223,13 @@ function kickQueue() {
       }
       setNet('待重試');
       scheduleRetry(item);
+      settleItem(item.id, { ok: false, retry: true, error: res.error || '' });
       return;
     }
     if (item.type === 'draft' && item.epoch !== draftEpoch) {
       dropItem(item.id);
       enqueueClear();
+      settleItem(item.id, { cancel: true });
       return;
     }
     dropItem(item.id);
@@ -208,6 +238,7 @@ function kickQueue() {
     }
     if (item.type === 'session') onSessionSaved(res);
     if (!readQueue().length) setNet('已同步');
+    settleItem(item.id, { ok: true });
     kickQueue();
   }).catch(function (err) {
     flushing = false;
@@ -219,18 +250,25 @@ function kickQueue() {
     }
     setNet('待重試');
     scheduleRetry(item);
+    settleItem(item.id, { ok: false, retry: true, error: String(err && err.message || err) });
   });
 }
 
 function enqueueDraft(d, manual) {
+  var dropped = [];
+  var id = uid();
   var q = readQueue().filter(function (x) {
     if (x.type !== 'draft') return true;
-    return x.id === inflightId;
+    if (x.id === inflightId) return true;
+    dropped.push(x.id);
+    return false;
   });
-  q.push({ type: 'draft', id: uid(), payload: d, manual: !!manual, epoch: draftEpoch });
+  q.push({ type: 'draft', id: id, payload: d, manual: !!manual, epoch: draftEpoch });
   writeQueue(q);
   setNet('同步中');
+  for (var i = 0; i < dropped.length; i++) moveWaiters(dropped[i], id);
   kickQueue();
+  return id;
 }
 
 function enqueueSession(payload) {
@@ -240,6 +278,7 @@ function enqueueSession(payload) {
   writeQueue(q);
   setNet('同步中');
   kickQueue();
+  return item.id;
 }
 
 function emptySet() {
@@ -582,10 +621,87 @@ function closeSetup() {
   document.documentElement.classList.remove('can-back');
 }
 
+function failLabel(res) {
+  if (res && res.retry) return '⚠ 失敗，已排入重試';
+  var msg = res && res.error ? String(res.error).replace(/\s+/g, ' ').trim() : '';
+  if (!msg) return '⚠ 失敗';
+  if (msg.length > 18) msg = msg.slice(0, 18) + '…';
+  if (msg.charAt(0) === '⚠') return msg;
+  return '⚠ ' + msg;
+}
+
+function armButton(btn, promise, save) {
+  if (!btn || btn.dataset.busy === '1') return;
+  var original = btn.textContent;
+  var token = {};
+  var pending = true;
+  btn._fbToken = token;
+  btn.dataset.busy = '1';
+  btn.classList.add('tap');
+  setTimeout(function () {
+    if (btn._fbToken !== token || !pending) return;
+    btn.classList.remove('tap');
+    btn.disabled = true;
+    btn.classList.add('busy');
+    btn.classList.remove('hold');
+    btn.textContent = '';
+    var sp = document.createElement('span');
+    sp.className = 'spin';
+    sp.setAttribute('aria-hidden', 'true');
+    btn.appendChild(sp);
+    btn.appendChild(document.createTextNode('處理中…'));
+  }, 120);
+  function restore(label, ms) {
+    pending = false;
+    if (btn._fbToken !== token) return;
+    btn.classList.remove('tap', 'busy');
+    btn.classList.add('hold');
+    btn.disabled = true;
+    btn.textContent = label;
+    setTimeout(function () {
+      if (btn._fbToken !== token) return;
+      btn.textContent = original;
+      btn.disabled = false;
+      btn.classList.remove('busy', 'hold', 'tap');
+      delete btn.dataset.busy;
+      btn._fbToken = null;
+    }, ms);
+  }
+  function clearNow() {
+    pending = false;
+    if (btn._fbToken !== token) return;
+    btn.textContent = original;
+    btn.disabled = false;
+    btn.classList.remove('busy', 'hold', 'tap');
+    delete btn.dataset.busy;
+    btn._fbToken = null;
+  }
+  Promise.resolve(promise).then(function (res) {
+    if (res && res.cancel) { clearNow(); return; }
+    if (res && res.ok) restore(save ? '✓ 已儲存' : '✓ 完成', 1500);
+    else restore(failLabel(res), 2500);
+  }, function () {
+    restore('⚠ 失敗，已排入重試', 2500);
+  });
+}
+
+function pressBtn(e) {
+  var t = e.target;
+  if (!t) return;
+  if (t.nodeType !== 1) t = t.parentElement;
+  if (!t || !t.closest) return;
+  var btn = t.closest('.btn');
+  if (!btn || btn.disabled || btn.dataset.busy === '1') return;
+  btn.classList.add('tap');
+  setTimeout(function () { btn.classList.remove('tap'); }, 180);
+}
+
 $('btnCfg').onclick = function () { openSetup(true); };
 $('btnBack').onclick = function () { if (configured()) closeSetup(); };
 
 $('btnSetup').onclick = function () {
+  if (this.dataset.busy === '1') return;
+  var btn = this;
   var url = $('apiUrl').value.trim();
   var key = $('apiKey').value.trim();
   if (!url || !key) { showToast('請填網址與金鑰', true); return; }
@@ -603,20 +719,24 @@ $('btnSetup').onclick = function () {
   }
   writeQueue(pending);
   closeSetup();
-  if (!booted) start();
+  var p;
+  if (!booted) p = start();
   else {
-    syncBoot(true);
+    p = syncBoot(true);
     kickQueue();
   }
+  armButton(btn, p, true);
 };
 
 $('btnDraft').onclick = function () {
+  if (this.dataset.busy === '1') return;
   state.date = fromInputDate($('date').value);
   state.dayType = $('dayType').value;
   var d = draftObj();
   writeLocalDraft(d);
   if (serverTimer) clearTimeout(serverTimer);
-  enqueueDraft(d, true);
+  var id = enqueueDraft(d, true);
+  armButton(this, watchItem(id), true);
 };
 
 $('btnAddEx').onclick = function () {
@@ -642,15 +762,17 @@ $('dayType').addEventListener('change', function () {
 });
 
 $('btnGenerate').onclick = function () {
+  if (this.dataset.busy === '1') return;
+  var btn = this;
   var dayType = $('dayType').value;
   setLoading(true);
   setNet('同步中');
-  api('generateSession', { dayType: dayType }).then(function (res) {
+  var p = api('generateSession', { dayType: dayType }).then(function (res) {
     setLoading(false);
     if (!readQueue().length) setNet('已同步');
     if (!res || !res.ok) {
       showToast((res && res.error) || '生成失敗', true);
-      return;
+      return { ok: false, error: (res && res.error) || '生成失敗' };
     }
     var s = res.session;
     state.dayType = s.dayType;
@@ -689,11 +811,14 @@ $('btnGenerate').onclick = function () {
     rememberPlan();
     saveDraftSilent();
     showToast('已生成「' + dayType + '」課表（模板 ' + (s.sourceDate || '') + '）');
+    return { ok: true };
   }).catch(function (err) {
     setLoading(false);
     setNet('待重試');
     showToast(String(err && err.message || err), true);
+    return { ok: false, error: String(err && err.message || err) };
   });
+  armButton(btn, p, false);
 };
 
 var saveLock = false;
@@ -729,10 +854,15 @@ function doSave(overwrite) {
     })
   };
   writeLocalDraft(draftObj());
-  enqueueSession(payload);
+  return enqueueSession(payload);
 }
 
-$('btnSave').onclick = function () { doSave(false); };
+$('btnSave').onclick = function () {
+  if (this.dataset.busy === '1') return;
+  var id = doSave(false);
+  if (!id) return;
+  armButton(this, watchItem(id), true);
+};
 
 // iOS: after the keyboard closes, the viewport can stay shifted and leave a blank area.
 // Nudging the scroll position makes WebKit recalc the layout.
@@ -770,16 +900,20 @@ function scheduleBoot() {
 }
 
 function syncBoot(silent) {
-  if (!configured()) return;
+  if (!configured()) return Promise.resolve({ cancel: true });
   setNet('同步中');
-  api('bootstrap', null).then(function (res) {
+  return api('bootstrap', null).then(function (res) {
     if (!res || res.ok === false) {
       if (!silent && !(state.exercises && state.exercises.length)) {
         showToast('初始化失敗：' + ((res && res.error) || ''), true);
       }
       setNet(res && res.error === '未授權' ? '未授權' : '待重試');
       if (!(res && res.error === '未授權')) scheduleBoot();
-      return;
+      return {
+        ok: false,
+        retry: !(res && res.error === '未授權'),
+        error: (res && res.error) || '初始化失敗'
+      };
     }
     try {
       localStorage.setItem(BOOT_KEY, JSON.stringify({
@@ -814,12 +948,14 @@ function syncBoot(silent) {
       $('meta').textContent = meta.join(' · ');
     }
     if (!readQueue().length) setNet('已同步');
+    return { ok: true };
   }).catch(function (err) {
     if (!silent && !(state.exercises && state.exercises.length)) {
       showToast('初始化失敗：' + (err && err.message || err), true);
     }
     setNet('待重試');
     scheduleBoot();
+    return { ok: false, retry: true, error: String(err && err.message || err) };
   });
 }
 
@@ -835,10 +971,16 @@ function start() {
   var restored = restoreLocal();
   render();
   if (restored) showToast('已還原草稿');
-  syncBoot(!!restored);
+  var p = syncBoot(!!restored);
   kickQueue();
+  return p;
 }
 
+document.addEventListener('touchstart', pressBtn, { passive: true });
+document.addEventListener('pointerdown', function (e) {
+  if (e.pointerType === 'touch') return;
+  pressBtn(e);
+});
 window.addEventListener('online', function () { kickQueue(); });
 document.addEventListener('visibilitychange', function () {
   if (document.visibilityState === 'visible') kickQueue();

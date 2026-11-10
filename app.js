@@ -452,9 +452,12 @@ function renderSet(ex, ei, set, si) {
 
   grid.appendChild(numField('重量', set, 'weight', true));
   grid.appendChild(numField('次數', set, 'reps', true));
-  grid.appendChild(numField('秒數', set, 'sec', false));
-  grid.appendChild(numField('RPE', set, 'rpe', false));
-  grid.appendChild(textField('組間', set, 'rest', false));
+  var trio = document.createElement('div');
+  trio.className = 'set-trio';
+  trio.appendChild(numField('秒數', set, 'sec', false));
+  trio.appendChild(numField('RPE', set, 'rpe', false));
+  trio.appendChild(textField('組間', set, 'rest', false));
+  grid.appendChild(trio);
   Array.prototype.forEach.call(grid.children, function (c) { c.classList.add('big'); });
   grid.appendChild(textField('體感', set, 'feel', false));
 

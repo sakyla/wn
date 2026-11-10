@@ -115,6 +115,15 @@ select { min-width: 0; max-width: 100%; }
   gap: 8px;
 }
 .set-grid .full { grid-column: 1 / -1; }
+.set-trio {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.set-trio > * { min-width: 0; }
+.set-trio input { min-width: 0; max-width: 100%; padding-left: 6px; padding-right: 6px; }
 .stepper { display: flex; gap: 6px; align-items: center; }
 .stepper input { text-align: center; }
 .last {

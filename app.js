@@ -699,6 +699,26 @@ function pressBtn(e) {
   setTimeout(function () { btn.classList.remove('tap'); }, 180);
 }
 
+function applyTheme(theme) {
+  theme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#eef1f5' : '#0f1115');
+  var btn = $('btnTheme');
+  if (btn) btn.setAttribute('aria-label', theme === 'light' ? '淺色' : '深色');
+  try { localStorage.setItem('wn_theme', theme); } catch (e) {}
+}
+
+(function () {
+  var btn = $('btnTheme');
+  if (!btn) return;
+  var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  btn.setAttribute('aria-label', cur === 'light' ? '淺色' : '深色');
+  btn.onclick = function () {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+  };
+})();
+
 $('btnCfg').onclick = function () { openSetup(true); };
 $('btnBack').onclick = function () { if (configured()) closeSetup(); };
 

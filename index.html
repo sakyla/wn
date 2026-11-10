@@ -8,6 +8,15 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="apple-mobile-web-app-title" content="wn" />
   <meta name="theme-color" content="#0f1115" />
+  <script>
+    try {
+      var wnTheme = localStorage.getItem('wn_theme');
+      if (wnTheme !== 'light') wnTheme = 'dark';
+      document.documentElement.setAttribute('data-theme', wnTheme);
+      var wnMeta = document.querySelector('meta[name="theme-color"]');
+      if (wnMeta) wnMeta.setAttribute('content', wnTheme === 'light' ? '#eef1f5' : '#0f1115');
+    } catch (e) {}
+  </script>
   <title>wn</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon-192.png" />
@@ -45,6 +54,7 @@
       <h1>訓練紀錄</h1>
       <div class="top-side">
         <span id="net" class="net"></span>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnTheme" aria-label="深色"></button>
         <button type="button" class="btn btn-ghost btn-sm" id="btnCfg">設定</button>
       </div>
     </div>
